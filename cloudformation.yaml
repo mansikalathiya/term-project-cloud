@@ -1,0 +1,722 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Creates an S3 bucket, Cognito User Pool, Lambda functions, DynamoDB tables, and API Gateway
+
+Resources:
+
+# -------------------------------------------------------------S3----------------------------------------------------------------
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: b00979173-mansimusic
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+            AllowedOrigins:
+              - '*'
+            ExposedHeaders:
+              - 'ETag'
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldFiles
+            Status: Enabled
+            ExpirationInDays: 30
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        IgnorePublicAcls: false
+        BlockPublicPolicy: false
+        RestrictPublicBuckets: false
+
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3Bucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: PublicRead
+            Effect: Allow
+            Principal: "*"
+            Action:
+              - "s3:GetObject"
+              - "s3:GetObjectVersion"
+            Resource: !Sub "arn:aws:s3:::${S3Bucket}/*"
+# -------------------------------------------------------------------------------------------------------------------------------
+
+# ---------------------------------------------------------Cognito---------------------------------------------------------------
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: b00979173-mansimusic
+      AutoVerifiedAttributes:
+        - email 
+      UsernameAttributes:
+        - email
+      EmailVerificationMessage: 'Please verify your email address for my-app: {####}'
+      EmailVerificationSubject: 'Verify your email for my-app'
+
+  CognitoUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: "music"
+      UserPoolId:
+        Ref: CognitoUserPool
+
+  CognitoUserPoolClient:
+    Type: "AWS::Cognito::UserPoolClient"
+    Properties:
+      UserPoolId:
+        Ref: CognitoUserPool
+      ClientName: music-client
+      GenerateSecret: false
+           
+
+# # ---------------------------------------------------------------------------------------------------------------------------------
+
+# # -----------------------------------------------------------Lambda----------------------------------------------------------------
+  AddUserFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: addUser
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.12
+      Role: arn:aws:iam::297299434600:role/LabRole
+      Code:
+        S3Bucket: b00979173
+        S3Key: add_user.zip
+
+  GetPhotoFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: getPhoto
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.10
+      Role: arn:aws:iam::297299434600:role/LabRole
+      Code:
+        S3Bucket: b00979173
+        S3Key: get_photo.zip
+
+  PostMuiscFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: postMusic
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.10
+      Role: arn:aws:iam::297299434600:role/LabRole
+      Code:
+        S3Bucket: b00979173
+        S3Key: post_music.zip
+
+  GetMusicFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: getMusic
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.12
+      Role: arn:aws:iam::297299434600:role/LabRole
+      Code:
+        S3Bucket: b00979173
+        S3Key: get_music.zip
+
+  GetPhotoLinkFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: getPhotoLink
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.10
+      Role: arn:aws:iam::297299434600:role/LabRole
+      Code:
+        S3Bucket: b00979173
+        S3Key: get_photolink.zip
+
+# # ---------------------------------------------------------------------------------------------------------------------------------
+
+# # -----------------------------------------------------------DynamoDB--------------------------------------------------------------
+  UserTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: b00979173-User
+      AttributeDefinitions:   
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  MusicTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub b00979173-Music
+      AttributeDefinitions:
+        - AttributeName: mId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: mId
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+ 
+# # ---------------------------------------------------------------------------------------------------------------------------------
+
+
+
+# #-------------------------------------------------------------ApiGateway-------------------------------------------------------------
+ 
+  ApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: Mansimusic
+      Description: API Gateway for my application
+      FailOnWarnings: true
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  ApiGatewayAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Properties:
+      Name: CognitoAuthorizer
+      RestApiId: !Ref ApiGateway
+      Type: COGNITO_USER_POOLS
+      IdentitySource: method.request.header.Authorization
+      ProviderARNs:
+        - !GetAtt CognitoUserPool.Arn
+
+  # -------------- /User -------------------
+
+  ApiGatewayUserResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: "user"
+      RestApiId: !Ref ApiGateway
+    DependsOn: ApiGateway
+
+  ApiGatewayUserCors:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      HttpMethod: OPTIONS
+      ResourceId: !Ref ApiGatewayUserResource
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ""
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          ResponseModels:
+            application/json: "Empty"
+
+  ApiGatewayUserAddMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref ApiGatewayUserResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        RequestTemplates:
+          application/json: $input.json('$')
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunctionArn}/invocations
+          - LambdaFunctionArn: !GetAtt AddUserFunction.Arn
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseTemplates:
+              "application/json": $input.json('$')
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      RequestParameters:
+        method.request.querystring.name: false
+      MethodResponses:
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          StatusCode: "200"
+
+  
+  # ------------------------------------------
+
+  # -----------------/getphoto--------------
+
+  ApiGatewayUserDetailsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref ApiGatewayUserResource
+      PathPart: "photo"
+      RestApiId: !Ref ApiGateway
+
+  ApiGatewayUserDeatilsCors:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      HttpMethod: OPTIONS
+      ResourceId: !Ref ApiGatewayUserDetailsResource
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ""
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          ResponseModels:
+            application/json: "Empty"
+
+  ApiGatewayUserDetailsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref ApiGatewayUserDetailsResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref ApiGatewayAuthorizer
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunctionArn}/invocations
+          - LambdaFunctionArn: !GetAtt GetPhotoFunction.Arn
+        RequestTemplates:
+          application/json: $input.json('$')
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseTemplates:
+              "application/json": $input.json('$')
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      RequestParameters:
+        method.request.querystring.name: false
+      MethodResponses:
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          StatusCode: "200"
+
+  # --------------/postmusic-------------------
+
+  ApiGatewayVideoUploadResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref ApiGatewayVideoResource
+      PathPart: "upload"
+      RestApiId: !Ref ApiGateway
+
+  ApiGatewayVideoUploadCors:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      HttpMethod: OPTIONS
+      ResourceId: !Ref ApiGatewayVideoUploadResource
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ""
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          ResponseModels:
+            application/json: "Empty"
+
+  ApiGatewayPostVideo:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref ApiGatewayVideoUploadResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref ApiGatewayAuthorizer
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunctionArn}/invocations
+          - LambdaFunctionArn: !GetAtt PostMuiscFunction.Arn
+        RequestTemplates:
+          application/json: $input.json('$')
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseTemplates:
+              "application/json": $input.json('$')
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      RequestParameters:
+        method.request.querystring.name: false
+      MethodResponses:
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          StatusCode: "200"
+
+# ---------------------------------------------
+
+# -------------------/music-------------------
+
+  ApiGatewayVideoResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: "music"
+      RestApiId: !Ref ApiGateway
+
+  ApiGatewayVideoCors:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      HttpMethod: OPTIONS
+      ResourceId: !Ref ApiGatewayVideoResource
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ""
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          ResponseModels:
+            application/json: "Empty"
+  
+  ApiGatewayGetVideo:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref ApiGatewayVideoResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref ApiGatewayAuthorizer
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunctionArn}/invocations
+          - LambdaFunctionArn: !GetAtt GetMusicFunction.Arn
+        RequestTemplates:
+          application/json: $input.json('$')
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseTemplates:
+              "application/json": $input.json('$')
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      RequestParameters:
+        method.request.querystring.name: false
+      MethodResponses:
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          StatusCode: "200"
+
+  # ---------------------------------------------------
+
+  # -------------------/photolink-------------------
+
+  ApiGatewaySearchResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref ApiGatewayVideoResource
+      PathPart: "photolink"
+      RestApiId: !Ref ApiGateway
+
+  ApiGatewaySearchMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref ApiGatewaySearchResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref ApiGatewayAuthorizer
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunctionArn}/invocations
+          - LambdaFunctionArn: !GetAtt GetPhotoLinkFunction.Arn
+        RequestTemplates:
+          application/json: $input.json('$')
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseTemplates:
+              "application/json": $input.json('$')
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      RequestParameters:
+        method.request.querystring.name: false
+      MethodResponses:
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          StatusCode: "200"
+
+  ApiGatewayVideoSearchCors:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      HttpMethod: OPTIONS
+      ResourceId: !Ref ApiGatewaySearchResource
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ""
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          ResponseModels:
+            application/json: "Empty"
+  
+  # ---------------------------------------------------
+ 
+  # --------------Invoke Lambda Permissions----------------
+
+  LambdaPermissionAddUser:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt AddUserFunction.Arn
+      Principal: apigateway.amazonaws.com
+
+  LambdaPermissionGetPhoto:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt GetPhotoFunction.Arn
+      Principal: apigateway.amazonaws.com
+    
+  LambdaPermissionPostMusic:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt PostMuiscFunction.Arn
+      Principal: apigateway.amazonaws.com
+  
+  LambdaPermissionGetMusic:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt GetMusicFunction.Arn
+      Principal: apigateway.amazonaws.com
+  
+  LambdaPermissionGetPhotoLink:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt GetPhotoLinkFunction.Arn
+      Principal: apigateway.amazonaws.com
+  
+  # -------------------------------------------------------
+
+  ApiGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: 
+      - ApiGatewayUserAddMethod
+      - ApiGatewayUserDetailsMethod
+      - ApiGatewayPostVideo
+      - ApiGatewayGetVideo
+      - ApiGatewaySearchMethod
+    Properties:
+      RestApiId: !Ref ApiGateway
+
+  ApiGatewayStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref ApiGateway
+      StageName: prod
+      DeploymentId: !Ref ApiGatewayDeployment
+
+# # ---------------------------------------------------------------------------------------------------------------------
+# # ---------------------------------------------------EC2---------------------------------------------------------------
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-051f8a213df8bc089
+      InstanceType: t2.micro
+      KeyName: vockey
+      SecurityGroups:
+        - Ref: mansimusicSecurityGroup
+      Tags:
+        - Key: Name
+          Value: Music
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          sudo su
+          mkdir /home/music/
+          sudo yum update
+          sudo yum install git -y 
+          cd /home/music
+          git clone https://git.cs.dal.ca/courses/2024-summer/csci4145-5409/mkalathiya.git
+          cd mkalathiya/Term_project/music
+          rm -f .env
+          echo "REACT_APP_API_BASE_URL='https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod'" > .env
+          echo "REACT_APP_USER_POOL_ID=${CognitoUserPool}" >> .env
+          echo "REACT_APP_CLIENT_ID=${CognitoUserPoolClient}" >> .env
+          echo "REACT_APP_S3_BUCKET=${S3Bucket}" >> .env
+          yum install nodejs -y
+          yum npm install -y
+          sudo npm install 
+          sudo npm run start&
+
+  mansimusicSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH and port 3000 access from anywhere
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+# # -----------------------------------------------------------------------------------------------------------------------
+# #----------------------------------------------------Backup---------------------------------------------------------------
+  DynamoDBTableBackupVault:
+    Type: AWS::Backup::BackupVault
+    Properties:
+      BackupVaultName: music-backup-vault
+
+  DynamoDBTableBackupSelection:
+    Type: AWS::Backup::BackupSelection
+    Properties:
+      BackupPlanId: !Ref DynamoDBTableBackupPlan
+      BackupSelection:
+        SelectionName: music-DB-backup-selection
+        IamRoleArn: arn:aws:iam::297299434600:role/LabRole
+        Resources:
+          - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/b00979173-Music
+          - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/b00979173-User
+
+  DynamoDBTableBackupPlan:
+    Type: AWS::Backup::BackupPlan
+    Properties:
+      BackupPlan:
+        BackupPlanName: music-DB-backup-plan
+        BackupPlanRule:
+          - RuleName: music-DB-backup-rule
+            ScheduleExpression: cron(0 0 * * ? *) 
+            TargetBackupVault: !Ref DynamoDBTableBackupVault
+            StartWindowMinutes: 60 
+            CompletionWindowMinutes: 10080 
+            Lifecycle:
+              DeleteAfterDays: 30 
+            
+
+# # ------------------------------------------------------------------------------------------------------------------------
+          
+Outputs:
+
+  S3BucketName:
+    Description: Name of the S3 bucket
+    Value: !Ref S3Bucket
+  CognitoUserPoolId:
+    Description: ID of the Cognito User Pool
+    Value: !Ref CognitoUserPool
+
+  CognitoUserPoolDomain:
+    Description: Domain name for the Cognito User Pool
+    Value: !Ref CognitoUserPoolDomain
+
+  CognitoUserPoolClientId:
+    Description: ID of the Cognito User Pool Client
+    Value: !Ref CognitoUserPoolClient
+
+  ApiGatewayUrl:
+    Description: URL of the API Gateway
+    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod"
+
+#   EC2InstancePublicIp:
+#     Description: Public IP address of the EC2 instance
+#     Value: !GetAtt EC2Instance.PublicIp
+
+
+  
+  
