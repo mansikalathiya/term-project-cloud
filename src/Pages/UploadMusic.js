@@ -39,9 +39,9 @@ const VideoUploadForm = () => {
     }
 
     const s3 = new AWS.S3({
-      accessKeyId: "ASIAUKODNLRUGXY6HSEH" ,
-      secretAccessKey: "ypycQK6FleUxGjfDRo86vaIvwqMjSJcvlP30mNKP",
-      sessionToken: "IQoJb3JpZ2luX2VjEBMaCXVzLXdlc3QtMiJHMEUCIQDdBeMeEn7qhqOvaGbkiJRgqcvtj+JvioC9IIQsZL97wgIgZfzLXI4o1N0drkuD5PYVXWEcit8ptEOXFJaKc4ddk3cqsgII/P//////////ARAAGgwyOTcyOTk0MzQ2MDAiDOvEX9LKtxCHLZvPpCqGAoEzrRsFuKwuLNc5IGEC1L7n/HJ2Uic1E4BNyj/KF2bKgrBg46oHn0yzIHzJWC9LVHEOVM6QsDtTXgzDrgK5RRc4sjCvfKUAfJscF83ZwsE6b07IhQixplP648BckTdzJGEbsVYKsJDWtxmrtoz1ZsaPbDggGgVHMnnmvVmMl10BpQssaBuEFAZaJngPMJj2dicf1++PryhAjdyn/MEDIwo/YBx0qBXbyPCYaqWDY/NlYoBJz7jOzgw4XNyVteaK3mTlfUcg2duiHnQnmM8q+/QJa9O35AQDPeklMcWGCI1gzy/EhuKhzubDz1MgDvwfu3V8C8l1pkClfxjJWOKPNe0bEcuSBVYwrrnLtQY6nQH9ncR7VZkgSmoW/tDX3kZaOGpOQB9wfYSesyr2Wh7ud2NDDwd4ewEamioID2plj+uYaFI8qJFbpJIjMBSZ3cm6b/TXUiEENcfZ7156lMJfRknsNO/kwlqP4sj4jyPIk54zqHvlcuqjWhgoc4hqWvmVza9sIdlq/0w2DvgrG7JxjqAyj+2GTscJ6djuGaNGun3dj+wfHoU1sluid3Si",
+      accessKeyId: "ASIAUKODNLRUBWTK42IF" ,
+      secretAccessKey: "4UaMTxnhkGSOKzcG49dOB16CJ4YcFFEJyEXwws8R",
+      sessionToken: "IQoJb3JpZ2luX2VjEAIaCXVzLXdlc3QtMiJGMEQCIFdhaD4dcyb5SxUYYqtLone7l9WhvCWnujZKoymN80LlAiAY2aJNu41R3vOxGjzXTvu53ea4bKeeNqf7v+g3nz0YcCqyAgj7//////////8BEAAaDDI5NzI5OTQzNDYwMCIMeEh8QFSHEAtR9BimKoYCpkmNQyYoo2J9kGZUKjx7dbjsiclaOXHDEbCqEvKF7xsa7hXmlU0HAgSQrRY4Jpnn7w3tTsZkiVtZaA2WDUaJWFBGHVeuefeGoAmUpnGSNqtXznNhORGHFX5eltr9nThABw8H8MkQb0aYVedIR0OYX5WkDisqd09ZpR++15uWfEKNJWdNPl9ZsA1xg6ychYLMjxwglfyqOaxygvnrBp0/w/pPInKhHI55tPkyvcQtqKX63Ak8XfcNgWlPbvSrs6kg5inTNX66yzLLQXbS6ypkhGZp/x+ySo61JUIcq6Rl4iOHo6w4oqPtBB9bqo9P0DGYW0OGxV2eB0utzrqkjOBijXb+hqsxejC6iYC2BjqeAVJF2fApej03x3SelPsq5MzVMsd84ILCw9yK9tFbkZjYehC7Gpot4WHAwWTCEkGiXqpne6EGIx9vMUuVGTl3LqhapUOg781TwIgH96D+rWwM8qt1WBYbWtXnfqZvuRPLSQCzLmSfEi93sjZPVibS/v+gUsAOUUx3mp9jyXazMizu19MQDzYqzBSU+dVN4TE6dqu4SmvuIVNjUAZQTF8S",
       region: 'us-east-1'
     });
 
@@ -52,7 +52,7 @@ const VideoUploadForm = () => {
     };
 
     const thumbnailParams = {
-      Bucket: "b00979173-mansimusic",
+      Bucket: process.env.REACT_APP_S3_BUCKET,
       Key: `thumbnails/${thumbnail.name}`,
       Body: thumbnail,
     };
